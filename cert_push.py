@@ -3,6 +3,8 @@ import os
 import datetime
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+import subprocess
+import datetime
 
 # Configuration
 SOURCE_CERT = "test.crt"
@@ -74,6 +76,27 @@ def check_remote_expiry(ssh, cert_path):
     minutes_left = (expiry_date - datetime.datetime.now()).total_seconds() / 60
     print(f"Taiwan Certificate expires in: {minutes_left:.2f} minutes.")
     return minutes_left < 45
+
+
+def generate_new_cert():
+    print("Generating new 30-minute certificate locally...")
+    # Calculate expiry for 30 minutes from now
+    expiry_ts = (datetime.datetime.utcnow() + datetime.timedelta(minutes=30)).strftime("%Y%m%d%H%M%SZ")
+
+    cmd = [
+        "openssl", "req", "-x509", "-newkey", "rsa:4096",
+        "-keyout", "test.key", "-out", "test.crt",
+        "-nodes", "-days", "1",  # Days is required but -not_after overrides it
+        "-subj", "/C=SG/ST=Singapore/L=Singapore/O=Lab/CN=test.local",
+        "-not_after", expiry_ts
+    ]
+
+    # Run the openssl command via Python
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        print("New certificate generated successfully.")
+    else:
+        print(f"Error generating cert: {result.stderr}")
 
 if __name__ == "__main__":
     push_certificates()
