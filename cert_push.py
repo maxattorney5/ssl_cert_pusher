@@ -10,7 +10,7 @@ SOURCE_KEY = "test.key"
 REMOTE_HOST = "192.168.221.163"
 REMOTE_USER = "ubuntu"
 REMOTE_PATH = "/home/ubuntu/"  # Where the certs will land initially
-KEY_FILE = os.path.expanduser("~/.ssh/id_rsa_automation")
+KEY_FILE = "/home/kali/.ssh/id_rsa_automation"
 
 
 def push_certificates():
