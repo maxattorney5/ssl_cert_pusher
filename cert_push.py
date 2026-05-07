@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 import ssl
 import hashlib
+import socket
 
 # Configuration
 SOURCE_CERT = "test.crt"
@@ -120,17 +121,23 @@ def generate_new_cert():
     else:
         print(f"Error generating cert: {result.stderr}")
 
+
 def verify_live_sync(ip):
     print(f"Verifying live synchronization for {ip}...")
     try:
-        # Connect to the live port and grab the certificate
+        # Create a context that doesn't verify the self-signed cert
         context = ssl._create_unverified_context()
-        cert_pem = ssl.get_server_certificate((ip, 443), ssl_context=context)
-        cert_der = ssl.pem_to_der_certificate(cert_pem)
-        live_fingerprint = hashlib.sha256(cert_der).hexdigest().upper()
 
-        # Format it with colons like OpenSSL does: 1A:2B:3C...
-        formatted_fp = ":".join(live_fingerprint[i:i + 2] for i in range(0, len(live_fingerprint), 2))
+        # Manually establish the connection and perform the handshake
+        with socket.create_connection((ip, 443)) as sock:
+            with context.wrap_socket(sock, server_hostname=ip) as ssock:
+                # Get the certificate in binary (DER) format
+                cert_der = ssock.getpeercert(binary_form=True)
+
+        # Calculate SHA256 Fingerprint
+        live_hash = hashlib.sha256(cert_der).hexdigest().upper()
+        formatted_fp = ":".join(live_hash[i:i + 2] for i in range(0, len(live_hash), 2))
+
         print(f"Live Fingerprint: {formatted_fp}")
         return formatted_fp
     except Exception as e:
