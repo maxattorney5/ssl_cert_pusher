@@ -65,10 +65,10 @@ def push_certificates():
 
             if live_fp == local_fp:
                 print("✅ SUCCESS: Live server is now using the new certificate!")
+                print("Full renewal cycle complete.")
             else:
                 print("❌ CRITICAL ERROR: Live server is still using an OLD certificate (Desync).")
 
-            print("Full renewal cycle complete.")
         else:
             print("Status: Taiwan certificate is still valid. No action taken.")
 
