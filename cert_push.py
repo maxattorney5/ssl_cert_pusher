@@ -4,6 +4,8 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 import subprocess
 from datetime import datetime, timedelta, timezone
+import ssl
+import hashlib
 
 # Configuration
 SOURCE_CERT = "test.crt"
@@ -43,7 +45,28 @@ def push_certificates():
 
             # 6. Reload the webserver to apply changes
             print("Reloading Nginx in Taiwan...")
-            ssh.exec_command("sudo systemctl reload nginx")
+            ssh.exec_command("sudo systemctl restart nginx")
+            # use this line instead if command permission on server is not allowed, change param "YOUR_PASSWORD" to the actual password of your target server
+            # ssh.exec_command("echo 'YOUR_PASSWORD' | sudo -S systemctl restart nginx")
+
+            # We give Nginx 2 seconds to finish restarting before we check
+            import time
+            time.sleep(2)
+
+            live_fp = verify_live_sync(REMOTE_HOST)
+
+            local_cmd = f"openssl x509 -in {SOURCE_CERT} -noout -sha256 -fingerprint"
+            local_fp_raw = subprocess.check_output(local_cmd, shell=True).decode()
+            local_fp = local_fp_raw.split('=')[1].strip()
+
+            print(f"Local Source: {local_fp}")
+            print(f"Live Server:  {live_fp}")
+
+            if live_fp == local_fp:
+                print("✅ SUCCESS: Live server is now using the new certificate!")
+            else:
+                print("❌ CRITICAL ERROR: Live server is still using an OLD certificate (Desync).")
+
             print("Full renewal cycle complete.")
         else:
             print("Status: Taiwan certificate is still valid. No action taken.")
@@ -96,6 +119,23 @@ def generate_new_cert():
         print("New certificate generated successfully.")
     else:
         print(f"Error generating cert: {result.stderr}")
+
+def verify_live_sync(ip):
+    print(f"Verifying live synchronization for {ip}...")
+    try:
+        # Connect to the live port and grab the certificate
+        context = ssl._create_unverified_context()
+        cert_pem = ssl.get_server_certificate((ip, 443), ssl_context=context)
+        cert_der = ssl.pem_to_der_certificate(cert_pem)
+        live_fingerprint = hashlib.sha256(cert_der).hexdigest().upper()
+
+        # Format it with colons like OpenSSL does: 1A:2B:3C...
+        formatted_fp = ":".join(live_fingerprint[i:i + 2] for i in range(0, len(live_fingerprint), 2))
+        print(f"Live Fingerprint: {formatted_fp}")
+        return formatted_fp
+    except Exception as e:
+        print(f"Verification failed: {e}")
+        return None
 
 if __name__ == "__main__":
     push_certificates()
