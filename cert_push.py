@@ -55,15 +55,12 @@ def push_certificates():
 
 
 def check_remote_expiry(ssh, cert_path):
-    # Retrieve the cert content from the remote Ubuntu server
     stdin, stdout, stderr = ssh.exec_command(f"cat {cert_path}")
     cert_data = stdout.read()
 
     if not cert_data:
-        print("No certificate found in Taiwan. Proceeding with initial push.")
-        return True  # Needs renewal/push
+        return True
 
-    # Parse the certificate
     cert = x509.load_pem_x509_certificate(cert_data, default_backend())
     expiry_date = cert.not_valid_after_utc
     now_utc = datetime.now(timezone.utc)
@@ -81,23 +78,19 @@ def check_remote_expiry(ssh, cert_path):
 
 
 def generate_new_cert():
-
+    print("Generating new 30-minute certificate locally...")
+    # Fix: Use timezone.utc to avoid the offset/negative minute bug
     now_utc = datetime.now(timezone.utc)
     expiry_ts = (now_utc + timedelta(minutes=30)).strftime("%Y%m%d%H%M%SZ")
-
-    print("Generating new 30-minute certificate locally...")
-    # Calculate expiry for 30 minutes from now
-    expiry_ts = (datetime.datetime.utcnow() + datetime.timedelta(minutes=30)).strftime("%Y%m%d%H%M%SZ")
 
     cmd = [
         "openssl", "req", "-x509", "-newkey", "rsa:4096",
         "-keyout", "test.key", "-out", "test.crt",
-        "-nodes", "-days", "1",  # Days is required but -not_after overrides it
+        "-nodes", "-days", "1",
         "-subj", "/C=SG/ST=Singapore/L=Singapore/O=Lab/CN=test.local",
         "-not_after", expiry_ts
     ]
 
-    # Run the openssl command via Python
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode == 0:
         print("New certificate generated successfully.")
