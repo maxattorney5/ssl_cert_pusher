@@ -27,8 +27,16 @@ def push_certificates():
         sftp = ssh.open_sftp()
         print("Pushing test.crt...")
         sftp.put(SOURCE_CERT, REMOTE_PATH + "test.crt")
+        # Tell Nginx to reload the new configuration
+        print("Reloading Nginx in Taiwan...")
+        # Use 'reload' instead of 'restart' to avoid dropping active connections
+        ssh.exec_command("sudo systemctl reload nginx")
         print("Pushing test.key...")
         sftp.put(SOURCE_KEY, REMOTE_PATH + "test.key")
+        # Tell Nginx to reload the new configuration
+        print("Reloading Nginx in Taiwan...")
+        # Use 'reload' instead of 'restart' to avoid dropping active connections
+        ssh.exec_command("sudo systemctl reload nginx")
 
         sftp.close()
 
@@ -56,10 +64,16 @@ def check_remote_expiry(ssh, cert_path):
     # Parse the certificate
     cert = x509.load_pem_x509_certificate(cert_data, default_backend())
     expiry_date = cert.not_valid_after
-    days_left = (expiry_date - datetime.datetime.now()).days
 
-    print(f"Taiwan Certificate expires in: {days_left} days.")
-    return days_left < 30  # Returns True if renewal is needed (e.g., < 30 days left)
+    # Old logic: days_left < 30
+    #days_left = (expiry_date - datetime.datetime.now()).days
+    #print(f"Taiwan Certificate expires in: {days_left} days.")
+    #return days_left < 30  # Returns True if renewal is needed (e.g., < 30 days left)
+
+    # New logic: minutes_left < 45 (to trigger a renewal since we only have 30 mins)
+    minutes_left = (expiry_date - datetime.datetime.now()).total_seconds() / 60
+    print(f"Taiwan Certificate expires in: {minutes_left:.2f} minutes.")
+    return minutes_left < 45
 
 if __name__ == "__main__":
     push_certificates()
