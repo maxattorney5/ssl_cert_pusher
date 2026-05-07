@@ -5,6 +5,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 import subprocess
 import datetime
+from datetime import datetime, timedelta, timezone
 
 # Configuration
 SOURCE_CERT = "test.crt"
@@ -66,7 +67,8 @@ def check_remote_expiry(ssh, cert_path):
 
     # Parse the certificate
     cert = x509.load_pem_x509_certificate(cert_data, default_backend())
-    expiry_date = cert.not_valid_after
+    expiry_date = cert.not_valid_after_utc
+    now_utc = datetime.now(timezone.utc)
 
     # Old logic: days_left < 30
     #days_left = (expiry_date - datetime.datetime.now()).days
@@ -74,12 +76,17 @@ def check_remote_expiry(ssh, cert_path):
     #return days_left < 30  # Returns True if renewal is needed (e.g., < 30 days left)
 
     # New logic: minutes_left < 45 (to trigger a renewal since we only have 30 mins)
-    minutes_left = (expiry_date - datetime.datetime.now()).total_seconds() / 60
+
+    minutes_left = (expiry_date - now_utc).total_seconds() / 60
     print(f"Taiwan Certificate expires in: {minutes_left:.2f} minutes.")
     return minutes_left < 45
 
 
 def generate_new_cert():
+
+    now_utc = datetime.now(timezone.utc)
+    expiry_ts = (now_utc + timedelta(minutes=30)).strftime("%Y%m%d%H%M%SZ")
+
     print("Generating new 30-minute certificate locally...")
     # Calculate expiry for 30 minutes from now
     expiry_ts = (datetime.datetime.utcnow() + datetime.timedelta(minutes=30)).strftime("%Y%m%d%H%M%SZ")
