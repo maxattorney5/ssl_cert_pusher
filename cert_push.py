@@ -1,5 +1,8 @@
 import paramiko
 import os
+import datetime
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 
 # Configuration
 SOURCE_CERT = "test.crt"
@@ -40,6 +43,23 @@ def push_certificates():
     except Exception as e:
         print(f"Error: {e}")
 
+
+def check_remote_expiry(ssh, cert_path):
+    # Retrieve the cert content from the remote Ubuntu server
+    stdin, stdout, stderr = ssh.exec_command(f"cat {cert_path}")
+    cert_data = stdout.read()
+
+    if not cert_data:
+        print("No certificate found in Taiwan. Proceeding with initial push.")
+        return True  # Needs renewal/push
+
+    # Parse the certificate
+    cert = x509.load_pem_x509_certificate(cert_data, default_backend())
+    expiry_date = cert.not_valid_after
+    days_left = (expiry_date - datetime.datetime.now()).days
+
+    print(f"Taiwan Certificate expires in: {days_left} days.")
+    return days_left < 30  # Returns True if renewal is needed (e.g., < 30 days left)
 
 if __name__ == "__main__":
     push_certificates()
