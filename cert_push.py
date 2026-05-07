@@ -16,42 +16,43 @@ KEY_FILE = "/home/kali/.ssh/id_rsa_automation"
 
 
 def push_certificates():
+    # 1. Configuration (ensure these are correct)
+    REMOTE_CERT_PATH = f"{REMOTE_PATH}test.crt"
+
     try:
-        # 1. Establish the SSH Client
+        # 2. Connect to Taiwan
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        # 2. Connect using the automation key
-        print(f"Connecting to Taiwan Server ({REMOTE_HOST})...")
         ssh.connect(REMOTE_HOST, username=REMOTE_USER, key_filename=KEY_FILE)
 
-        # 3. Use SFTP to push the files
-        sftp = ssh.open_sftp()
-        print("Pushing test.crt...")
-        sftp.put(SOURCE_CERT, REMOTE_PATH + "test.crt")
-        # Tell Nginx to reload the new configuration
-        print("Reloading Nginx in Taiwan...")
-        # Use 'reload' instead of 'restart' to avoid dropping active connections
-        ssh.exec_command("sudo systemctl reload nginx")
-        print("Pushing test.key...")
-        sftp.put(SOURCE_KEY, REMOTE_PATH + "test.key")
-        # Tell Nginx to reload the new configuration
-        print("Reloading Nginx in Taiwan...")
-        # Use 'reload' instead of 'restart' to avoid dropping active connections
-        ssh.exec_command("sudo systemctl reload nginx")
+        # 3. Check if we actually NEED to renew
+        needs_renewal = check_remote_expiry(ssh, REMOTE_CERT_PATH)
 
-        sftp.close()
+        if needs_renewal:
+            print("Action Required: Certificate is expiring or missing.")
 
-        # 4. Verification (The 'Engineer' touch)
-        stdin, stdout, stderr = ssh.exec_command(f"ls -l {REMOTE_PATH}test.*")
-        print("\nVerification on Taiwan Server:")
-        print(stdout.read().decode())
+            # 4. Generate the new cert locally on Kali
+            generate_new_cert()
+
+            # 5. Push the new files via SFTP
+            sftp = ssh.open_sftp()
+            print("Pushing updated test.crt...")
+            sftp.put(SOURCE_CERT, REMOTE_PATH + "test.crt")
+            print("Pushing updated test.key...")
+            sftp.put(SOURCE_KEY, REMOTE_PATH + "test.key")
+            sftp.close()
+
+            # 6. Reload the webserver to apply changes
+            print("Reloading Nginx in Taiwan...")
+            ssh.exec_command("sudo systemctl reload nginx")
+            print("Full renewal cycle complete.")
+        else:
+            print("Status: Taiwan certificate is still valid. No action taken.")
 
         ssh.close()
-        print("Successfully synchronized certificates.")
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Pipeline Error: {e}")
 
 
 def check_remote_expiry(ssh, cert_path):
